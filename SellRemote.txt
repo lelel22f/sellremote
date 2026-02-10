@@ -1,0 +1,23 @@
+local NET = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Net")
+local children = NET:GetChildren()
+local targetLen = #"PlotService/Sell"
+local sellIdx
+for i, c in ipairs(children) do
+    if c.Name == "RE/PlotService/Sell" then sellIdx = i break end
+end
+if not sellIdx then return warn("PlotService/Sell not found") end
+local remotes = {}
+for o = -5, 5 do
+    if o ~= 0 then
+        local r = children[sellIdx + o]
+        if r and r:IsA("RemoteEvent") and r.Name:match("^RE/(.+)$") and #r.Name:match("^RE/(.+)$") == targetLen and r.Name:find("[=+;?'@!<>%%^&%(%)%[%]{}|~`]") then
+            table.insert(remotes, r)
+        end
+    end
+end
+
+return function(...)
+    for _, r in ipairs(remotes) do
+        r:FireServer(...)
+    end
+end
