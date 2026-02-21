@@ -37,83 +37,24 @@ local keys = {jobId, jobIdNoHyph, jobId:upper(), jobIdNoHyph:lower(), string.rev
 local ciphers = {xorStr, subStr, addStr}
 
 local found = nil
+local honeypot1 = prefix .. target
+local honeypot2 = prefix .. "SellService/Sell"
 
--- We intentionally IGNORE the plaintext honeypot target, so we don't return it.
-local honeypot = prefix .. target
-
-if not found then
-    for _, child in ipairs(children) do
-        local body = child.Name:match("^" .. prefix .. "(.+)$")
-        if body and #body == targetLen then
-            for _, key in ipairs(keys) do
-                for _, fn in ipairs(ciphers) do
-                    local dec = fn(body, key)
-                    if dec == target and child.Name ~= honeypot then
-                        found = child
-                        break
-                    end
-                end
-                if found then break end
-            end
-            if found then break end
-        end
-    end
-end
-
-if not found then
-    local plainIdx = nil
-    for i, child in ipairs(children) do
-        if child.Name == prefix .. target then
-            plainIdx = i
-            break
-        end
-    end
-    if plainIdx then
-        for delta = -5, 5 do
-            if delta ~= 0 then
-                local idx = plainIdx + delta
-                if idx >= 1 and idx <= #children then
-                    local child = children[idx]
-                    local body = child.Name:match("^" .. prefix .. "(.+)$")
-                    if body and #body == targetLen and child:IsA("RemoteEvent") and child.Name ~= honeypot then
-                        local hasSpecial = false
-                        for i = 1, #body do
-                            local b = string.byte(body, i)
-                            if b < 32 or b > 126 or string.char(b):match("[=+;?'@!<>%%^&%(%)%[%]{}|~`%*]") then
-                                hasSpecial = true
-                                break
-                            end
-                        end
-                        if hasSpecial then
-                            found = child
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-if not found then
-    for _, child in ipairs(children) do
-        if child:IsA("RemoteEvent") then
-            local body = child.Name:match("^" .. prefix .. "(.+)$")
-            if body and #body == targetLen and child.Name ~= honeypot then
-                local readable = true
-                for i = 1, #body do
-                    local b = string.byte(body, i)
-                    if b < 32 or b > 126 then
-                        readable = false
-                        break
-                    end
-                end
-                if not readable then
+-- First, try to elegantly decrypt it
+for _, child in ipairs(children) do
+    local body = child.Name:match("^" .. prefix .. "(.+)$")
+    if body and #body == targetLen then
+        for _, key in ipairs(keys) do
+            for _, fn in ipairs(ciphers) do
+                local dec = fn(body, key)
+                if dec == target and child.Name ~= honeypot1 and child.Name ~= honeypot2 then
                     found = child
                     break
                 end
             end
+            if found then break end
         end
+        if found then break end
     end
 end
 
@@ -121,4 +62,17 @@ if found then
     return {found}
 end
 
-return {}
+-- If decryption fails (e.g. MBA cipher), fallback to exact-length match.
+-- Find all RemoteEvents where body length == 16, and NOT a honeypot.
+local candidates = {}
+for _, child in ipairs(children) do
+    if child:IsA("RemoteEvent") then
+        local body = child.Name:match("^" .. prefix .. "(.+)$")
+        if body and #body == targetLen and child.Name ~= honeypot1 and child.Name ~= honeypot2 then
+            table.insert(candidates, child)
+        end
+    end
+end
+
+-- Returning all valid candidates lets the bot's pcall() loop safely fire them until one works
+return candidates
