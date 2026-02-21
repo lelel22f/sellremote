@@ -1,23 +1,128 @@
 local NET = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Net")
 local children = NET:GetChildren()
-local targetLen = #"PlotService/Sell"
-local sellIdx
-for i, c in ipairs(children) do
-    if c.Name == "RE/PlotService/Sell" then sellIdx = i break end
+local jobId = game.JobId
+local jobIdNoHyph = jobId:gsub("-", "")
+local target = "PlotService/Sell"
+local prefix = "RE/"
+local targetLen = #target
+
+local function xorStr(enc, key)
+    if #key == 0 then return enc end
+    local r = {}
+    for i = 1, #enc do
+        r[i] = string.char(bit32.bxor(string.byte(enc, i), string.byte(key, ((i - 1) % #key) + 1)))
+    end
+    return table.concat(r)
 end
-if not sellIdx then return warn("PlotService/Sell not found") end
-local remotes = {}
-for o = -5, 5 do
-    if o ~= 0 then
-        local r = children[sellIdx + o]
-        if r and r:IsA("RemoteEvent") and r.Name:match("^RE/(.+)$") and #r.Name:match("^RE/(.+)$") == targetLen and r.Name:find("[=+;?'@!<>%%^&%(%)%[%]{}|~`]") then
-            table.insert(remotes, r)
+
+local function subStr(enc, key)
+    if #key == 0 then return enc end
+    local r = {}
+    for i = 1, #enc do
+        r[i] = string.char((string.byte(enc, i) - string.byte(key, ((i - 1) % #key) + 1)) % 256)
+    end
+    return table.concat(r)
+end
+
+local function addStr(enc, key)
+    if #key == 0 then return enc end
+    local r = {}
+    for i = 1, #enc do
+        r[i] = string.char((string.byte(enc, i) + string.byte(key, ((i - 1) % #key) + 1)) % 256)
+    end
+    return table.concat(r)
+end
+
+local keys = {jobId, jobIdNoHyph, jobId:upper(), jobIdNoHyph:lower(), string.reverse(jobId), string.reverse(jobIdNoHyph)}
+local ciphers = {xorStr, subStr, addStr}
+
+local found = nil
+
+for _, child in ipairs(children) do
+    if child.Name == prefix .. target then
+        found = child
+        break
+    end
+end
+
+if not found then
+    for _, child in ipairs(children) do
+        local body = child.Name:match("^" .. prefix .. "(.+)$")
+        if body and #body == targetLen then
+            for _, key in ipairs(keys) do
+                for _, fn in ipairs(ciphers) do
+                    local dec = fn(body, key)
+                    if dec == target then
+                        found = child
+                        break
+                    end
+                end
+                if found then break end
+            end
+            if found then break end
         end
     end
 end
 
-return function(...)
-    for _, r in ipairs(remotes) do
-        r:FireServer(...)
+if not found then
+    local plainIdx = nil
+    for i, child in ipairs(children) do
+        if child.Name == prefix .. target then
+            plainIdx = i
+            break
+        end
+    end
+    if plainIdx then
+        for delta = -5, 5 do
+            if delta ~= 0 then
+                local idx = plainIdx + delta
+                if idx >= 1 and idx <= #children then
+                    local child = children[idx]
+                    local body = child.Name:match("^" .. prefix .. "(.+)$")
+                    if body and #body == targetLen and child:IsA("RemoteEvent") then
+                        local hasSpecial = false
+                        for i = 1, #body do
+                            local b = string.byte(body, i)
+                            if b < 32 or b > 126 or string.char(b):match("[=+;?'@!<>%%^&%(%)%[%]{}|~`%*]") then
+                                hasSpecial = true
+                                break
+                            end
+                        end
+                        if hasSpecial then
+                            found = child
+                            break
+                        end
+                    end
+                end
+            end
+        end
     end
 end
+
+if not found then
+    for _, child in ipairs(children) do
+        if child:IsA("RemoteEvent") then
+            local body = child.Name:match("^" .. prefix .. "(.+)$")
+            if body and #body == targetLen then
+                local readable = true
+                for i = 1, #body do
+                    local b = string.byte(body, i)
+                    if b < 32 or b > 126 then
+                        readable = false
+                        break
+                    end
+                end
+                if not readable then
+                    found = child
+                    break
+                end
+            end
+        end
+    end
+end
+
+if found then
+    return {found}
+end
+
+return {}
