@@ -62,17 +62,27 @@ if found then
     return {found}
 end
 
--- If decryption fails (e.g. MBA cipher), fallback to exact-length match.
--- Find all RemoteEvents where body length == 16, and NOT a honeypot.
+local function isPlaintext(str)
+    local symbols = 0
+    for i = 1, #str do
+        local b = string.byte(str, i)
+        if (b < 48 or b > 57) and (b < 65 or b > 90) and (b < 97 or b > 122) and b ~= 47 then
+            symbols = symbols + 1
+        end
+    end
+    return symbols == 0
+end
+
 local candidates = {}
 for _, child in ipairs(children) do
     if child:IsA("RemoteEvent") then
         local body = child.Name:match("^" .. prefix .. "(.+)$")
         if body and #body == targetLen and child.Name ~= honeypot1 and child.Name ~= honeypot2 then
-            table.insert(candidates, child)
+            if not isPlaintext(body) then
+                table.insert(candidates, child)
+            end
         end
     end
 end
 
--- Returning all valid candidates lets the bot's pcall() loop safely fire them until one works
 return candidates
