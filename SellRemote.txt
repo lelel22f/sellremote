@@ -1,5 +1,3 @@
--- Universal Sell Remote Resolver
--- Uses Net module API to resolve the sell remote by plaintext name
 local Net = require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Net"):FindFirstChildWhichIsA("ModuleScript", true))
 local remote = Net:RemoteEvent("PlotService/Sell")
 if typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
